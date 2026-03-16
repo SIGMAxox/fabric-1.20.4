@@ -77,21 +77,29 @@ jobs:
             echo "⚠️ Continuing anyway..."
           fi
       
-      - name: Download Fabric 1.20.4 Server
+      - name: Download or Check Server
         run: |
-          echo "=== Downloading Fabric 1.20.4 ==="
+          if [ ! -f "server.jar" ]; then
+            echo "⬇️ Downloading Fabric 1.20.4..."
+            wget -O fabric-installer.jar https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar
+            java -jar fabric-installer.jar server -mcversion 1.20.4 -downloadMinecraft
+            
+            # Rename the generated jar to server.jar
+            mv fabric-server-*.jar server.jar 2>/dev/null || echo "Using existing server.jar"
+          fi
           
-          # تحميل Fabric Installer
-          wget -O fabric-installer.jar https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar
-          
-          # تنصيب Fabric Server 1.20.4
-          java -jar fabric-installer.jar server -mcversion 1.20.4 -downloadMinecraft
-          
-          echo "✔ Fabric 1.20.4 downloaded"
+          echo "✔ Server ready"
       
       - name: Run Fabric Server
         run: |
           echo "=== Starting Fabric 1.20.4 Server ==="
+          
+          # التحقق من وجود server.jar
+          if [ ! -f "server.jar" ]; then
+            echo "❌ server.jar not found!"
+            echo "Please upload your Fabric server.jar to the repository"
+            exit 1
+          fi
           
           java -Xmx18G -Xms14G \
             -XX:+UseG1GC \
@@ -112,7 +120,7 @@ jobs:
             -XX:SurvivorRatio=32 \
             -XX:+PerfDisableSharedMem \
             -XX:MaxTenuringThreshold=1 \
-            -jar fabric-server-mc.1.20.4-loader.0.16.9-launcher.1.0.1.jar nogui &
+            -jar server.jar nogui &
           SERVER_PID=$!
           
           echo "✔ Server started (PID: $SERVER_PID)"
@@ -122,9 +130,9 @@ jobs:
           echo ""
           echo "=== Server ONLINE ==="
           echo "🎮 Fabric 1.20.4"
-          echo "💾 RAM: 14GB"
+          echo "💾 RAM: 18GB"
           
-          MAX_TIME=20700
+          MAX_TIME=120
           ELAPSED=0
           
           while [ $ELAPSED -lt $MAX_TIME ]; do
