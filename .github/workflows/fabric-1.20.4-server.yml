@@ -25,36 +25,18 @@ jobs:
         run: |
           echo "=== Starting Playit via Docker ==="
           
-          # Check for secret_key
-          if [ -f playit.toml ] && grep -q "secret_key" playit.toml; then
-            SECRET_KEY=$(grep "secret_key" playit.toml | cut -d'"' -f2)
-            echo "✔ Found secret_key in playit.toml"
-          elif [ -n "${{ secrets.PLAYIT_SECRET_KEY }}" ]; then
-            SECRET_KEY="${{ secrets.PLAYIT_SECRET_KEY }}"
-            echo "✔ Using PLAYIT_SECRET_KEY from GitHub Secrets"
-          else
-            echo "⚠️ No secret_key found - will generate new claim URL"
-            echo "🔗 You need to claim this agent at playit.gg"
-            SECRET_KEY=""
-          fi
+          # Use hardcoded secret key
+          SECRET_KEY="2920331c04e20c8bbc86def3c3deaaf18a643b3dfc64ba45920519b4d7ac212b"
+          echo "✔ Using hardcoded secret_key"
           
           # Run playit in Docker with host network
           echo "🚀 Starting playit Docker container..."
-          if [ -n "$SECRET_KEY" ]; then
-            docker run -d \
-              --name playit-agent \
-              --network host \
-              --restart unless-stopped \
-              -e SECRET_KEY="$SECRET_KEY" \
-              ghcr.io/playit-cloud/playit-agent:latest
-          else
-            # Run without secret - will generate claim URL
-            docker run -d \
-              --name playit-agent \
-              --network host \
-              --restart unless-stopped \
-              ghcr.io/playit-cloud/playit-agent:latest
-          fi
+          docker run -d \
+            --name playit-agent \
+            --network host \
+            --restart unless-stopped \
+            -e SECRET_KEY="$SECRET_KEY" \
+            ghcr.io/playit-cloud/playit-agent:latest
           
           echo "⏳ Waiting for tunnel (20 seconds)..."
           sleep 20
@@ -132,7 +114,7 @@ jobs:
           echo "🎮 Fabric 1.20.4"
           echo "💾 RAM: 18GB"
           
-          MAX_TIME=120
+          MAX_TIME=180
           ELAPSED=0
           
           while [ $ELAPSED -lt $MAX_TIME ]; do
