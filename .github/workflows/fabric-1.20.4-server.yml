@@ -114,7 +114,7 @@ jobs:
           echo "🎮 Fabric 1.20.4"
           echo "💾 RAM: 18GB"
           
-          MAX_TIME=180
+          MAX_TIME=20700
           ELAPSED=0
           
           while [ $ELAPSED -lt $MAX_TIME ]; do
