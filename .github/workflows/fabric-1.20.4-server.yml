@@ -47,7 +47,7 @@ jobs:
           
           # Show logs
           echo "=== Playit Logs ==="
-          docker logs playit-agent 2>&1 | tail-30
+          docker logs playit-agent 2>&1 | tail -30
           echo "==================="
           
           # Verify container is running
