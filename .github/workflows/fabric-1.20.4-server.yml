@@ -47,7 +47,7 @@ jobs:
           
           # Show logs
           echo "=== Playit Logs ==="
-          docker logs playit-agent 2>&1 | tail -30
+          docker logs playit-agent 2>&1 | tail-30
           echo "==================="
           
           # Verify container is running
@@ -73,6 +73,7 @@ jobs:
           echo "✔ Server ready"
       
       - name: Run Fabric Server
+        id: server_run
         run: |
           echo "=== Starting Fabric 1.20.4 Server ==="
           
@@ -83,6 +84,7 @@ jobs:
             exit 1
           fi
           
+          # حفظ PID في ملف علشان نقدر نوصله من أي step
           java -Xmx18G -Xms14G \
             -XX:+UseG1GC \
             -XX:+ParallelRefProcEnabled \
@@ -104,6 +106,9 @@ jobs:
             -XX:MaxTenuringThreshold=1 \
             -jar server.jar nogui &
           SERVER_PID=$!
+          
+          # حفظ PID في ملف
+          echo $SERVER_PID > /tmp/server.pid
           
           echo "✔ Server started (PID: $SERVER_PID)"
           echo "⏳ Waiting 1 minute..."
@@ -128,11 +133,45 @@ jobs:
               echo "⏰ $((ELAPSED / 60)) minutes"
             fi
           done
+      
+      # هذا الـ step بيشتغل دايماً حتى لو عملت cancel أو حصل error
+      - name: Shutdown Server Gracefully
+        if: always()
+        run: |
+          echo "🛑 Shutting down server..."
           
-          if kill -0 $SERVER_PID 2>/dev/null; then
-            kill -TERM $SERVER_PID 2>/dev/null || true
+          # قراءة PID من الملف
+          if [ -f /tmp/server.pid ]; then
+            SERVER_PID=$(cat /tmp/server.pid)
+            
+            # التحقق إن السيرفر لسه شغال
+            if kill -0 $SERVER_PID 2>/dev/null; then
+              echo "Sending SIGTERM to server (PID: $SERVER_PID)..."
+              kill -TERM $SERVER_PID 2>/dev/null || true
+              
+              # انتظار 10 ثواني للإغلاق السلس
+              for i in {1..10}; do
+                if ! kill -0 $SERVER_PID 2>/dev/null; then
+                  echo "✔ Server stopped gracefully"
+                  break
+                fi
+                sleep 1
+              done
+              
+              # لو لسه شغال، force kill
+              if kill -0 $SERVER_PID 2>/dev/null; then
+                echo "⚠️ Force killing server..."
+                kill -9 $SERVER_PID 2>/dev/null || true
+              fi
+            else
+              echo "✔ Server already stopped"
+            fi
+          else
+            echo "⚠️ No server PID file found"
+            # محاولة إيجاد process يدوياً
+            pkill -TERM -f "server.jar" 2>/dev/null || true
             sleep 5
-            kill -9 $SERVER_PID 2>/dev/null || true
+            pkill -9 -f "server.jar" 2>/dev/null || true
           fi
           
           # Stop and remove playit Docker container
@@ -141,20 +180,36 @@ jobs:
           docker rm playit-agent 2>/dev/null || true
           echo "✔ Stopped"
       
+      # الحفظ بيشتغل دايماً حتى لو حصل cancel
       - name: Save changes
+        if: always()
         run: |
+          echo "💾 Saving changes..."
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
           
           if ! git diff --cached --quiet 2>/dev/null; then
             git commit -m "Auto-save: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            git push
-            echo "✔ Saved"
+            
+            # محاولة الـ push 3 مرات
+            for attempt in {1..3}; do
+              if git push; then
+                echo "✔ Saved successfully"
+                break
+              else
+                echo "⚠️ Push failed (attempt $attempt/3), retrying..."
+                sleep 5
+                git pull --rebase || true
+              fi
+            done
+          else
+            echo "ℹ️ No changes to save"
           fi
       
       - name: Auto-retrigger
-        if: github.run_attempt < 3
+        # بس يشتغل لو الـ workflow خلص عادي (مش canceled)
+        if: success() && github.run_attempt < 3
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
